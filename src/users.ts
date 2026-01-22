@@ -93,11 +93,16 @@ async function autoReply(ctx: Context): Promise<boolean> {
  * @param autoReplyInfo - Optional auto-reply info.
  */
 async function processTicket(
-  ticket: ISupportee,
+  ticket: ISupportee | null,
   ctx: Context,
   chatId: string,
   autoReplyInfo?: string,
 ) {
+  if (!ticket) {
+    log.error('processTicket: ticket is null');
+    return;
+  }
+
   const { config } = cache;
 
   // Handle forum topic creation if staffchat is a forum
@@ -220,6 +225,11 @@ async function chat(ctx: Context, chat: { id: string }) {
   } else if (cache.ticketSent[cache.userId] < config.spam_cant_msg) {
     cache.ticketSent[cache.userId]++;
     const ticket = await db.getTicketByUserId(cache.userId, ctx.session.groupCategory);
+
+    if (!ticket) {
+      log.error('chat: ticket not found for userId', cache.userId);
+      return;
+    }
 
     // Build extra options for staff chat messages (with thread_id for forums)
     const staffChatOptions: any = { parse_mode: config.parse_mode };
