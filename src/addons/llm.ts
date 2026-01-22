@@ -2,10 +2,17 @@ import { Context } from '../interfaces';
 import OpenAI from 'openai';
 import cache from '../cache';
 
-const llm = new OpenAI({
-    apiKey: cache.config.llm_api_key,
-    baseURL: cache.config.llm_base_url,
-});
+let llm: OpenAI | null = null;
+
+function getLLMClient(): OpenAI {
+    if (!llm) {
+        llm = new OpenAI({
+            apiKey: cache.config.llm_api_key,
+            baseURL: cache.config.llm_base_url,
+        });
+    }
+    return llm;
+}
 
 async function getResponseFromLLM(ctx: Context): Promise<string | null> {
     const systemPrompt = `You are a Support Agent. You have been assigned to help 
@@ -20,7 +27,7 @@ async function getResponseFromLLM(ctx: Context): Promise<string | null> {
 
     var response = null
     try {
-        response = await llm.chat.completions.create({
+        response = await getLLMClient().chat.completions.create({
             model: cache.config.llm_model || 'gpt-3.5-turbo',
             messages: [
                 { content: systemPrompt, role: "system" },
