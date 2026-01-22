@@ -1,6 +1,7 @@
 # bot settings
 bot_token: 'YOUR_BOT_TOKEN' # support bot token
 staffchat_id: 'SUPERGROUP_CHAT_ID' # eg. -123456789
+staffchat_is_forum: false # Set to true if staffchat is a forum (has topics). Each ticket will get its own topic.
 staffchat_type: 'telegram'
 staffchat_parse_mode: 'MarkdownV2'
 owner_id: 'YOUR_TELEGRAM_ID'

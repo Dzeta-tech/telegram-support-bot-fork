@@ -1,8 +1,9 @@
 import * as db from './db';
 import cache from './cache';
 import * as middleware from './middleware';
-import { Context } from './interfaces';
+import { Context, Messenger } from './interfaces';
 import { ISupportee } from './db';
+import TelegramAddon from './addons/telegram';
 import * as log from 'fancy-log'
 
 /**
@@ -111,18 +112,20 @@ const closeCommand = (ctx: Context): void => {
   const ticketId = extractTicketId(replyText);
   if (!ticketId) return;
 
-  db.open((tickets: ISupportee[]) => {
+  db.open(async (tickets: ISupportee[]) => {
     if (!tickets) {
       log.info('Close command: tickets undefined');
       return;
     }
     let userId: any = null;
-    tickets.forEach(ticket => {
+    let closedTicket: ISupportee | null = null;
+    for (const ticket of tickets) {
       if (ticket.id.toString().padStart(6, '0') === ticketId) {
         db.add(ticket.userid, 'closed', ticket.category, ctx.messenger);
+        closedTicket = ticket;
       }
       userId = ticket.userid;
-    });
+    }
     const paddedTicket = ticketId.toString().padStart(6, '0');
     middleware.reply(ctx, `${cache.config.language.ticket} #T${paddedTicket} ${cache.config.language.closed}`);
     middleware.sendMessage(
@@ -133,6 +136,11 @@ const closeCommand = (ctx: Context): void => {
     delete cache.ticketIDs[userId];
     delete cache.ticketStatus[userId];
     delete cache.ticketSent[userId];
+
+    // Close forum topic if applicable
+    if (closedTicket?.threadId && cache.config.staffchat_is_forum && cache.config.staffchat_type === Messenger.TELEGRAM) {
+      await TelegramAddon.getInstance().closeForumTopic(cache.config.staffchat_id, closedTicket.threadId);
+    }
   }, groups);
 };
 
@@ -162,19 +170,24 @@ const banCommand = (ctx: Context): void => {
  *
  * @param ctx - The bot context.
  */
-const reopenCommand = (ctx: Context): void => {
+const reopenCommand = async (ctx: Context): Promise<void> => {
   if (!ctx.session.admin) return;
   const replyText = ctx.message.reply_to_message.text;
   if (!replyText) return;
   const ticketId = extractTicketId(replyText);
   if (!ticketId) return;
-  db.getByTicketId(ticketId, (ticket: { userid: any; id: { toString: () => string } }) => {
+  db.getByTicketId(ticketId, async (ticket: ISupportee) => {
     db.reopen(ticket.userid, '', ctx.messenger);
     middleware.sendMessage(
       ctx.chat.id,
       ctx.messenger,
       `${cache.config.language.usr_with_ticket} #T${ticket.id.toString().padStart(6, '0')} ${cache.config.language.ticketReopened}`
     );
+
+    // Reopen forum topic if applicable
+    if (ticket.threadId && cache.config.staffchat_is_forum && cache.config.staffchat_type === Messenger.TELEGRAM) {
+      await TelegramAddon.getInstance().reopenForumTopic(cache.config.staffchat_id, ticket.threadId);
+    }
   });
 };
 

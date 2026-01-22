@@ -1,8 +1,9 @@
 import cache from './cache';
 import * as middleware from './middleware';
 import * as db from './db';
-import { Context } from './interfaces';
+import { Context, Messenger } from './interfaces';
 import { ISupportee } from './db';
+import TelegramAddon from './addons/telegram';
 import * as log from 'fancy-log'
 
 /**
@@ -158,17 +159,29 @@ async function chat(ctx: Context) {
     middleware.sendMessage(ticket.userid, ticket.messenger, ticketMsg(name, ctx.message));
   }
   const esc = middleware.strictEscape;
+
+  // Build options for staff chat message (with thread_id for forums)
+  const staffChatOptions: any = { parse_mode: cache.config.parse_mode };
+  if (ticket.threadId) {
+    staffChatOptions.message_thread_id = ticket.threadId;
+  }
+
   middleware.sendMessage(
     ctx.chat.id,
     cache.config.staffchat_type,
     `${cache.config.language.msg_sent} ${esc(name)}`,
+    staffChatOptions,
   );
   log.info(`Answer: ${ticketMsg(name, ctx.message)}`);
   cache.ticketSent[ticketId] = null;
 
   // Auto-close the ticket if enabled
   if (cache.config.auto_close_tickets) {
-      db.add(ticketId, 'closed', null, ticket.messenger);
+    db.add(ticketId, 'closed', null, ticket.messenger);
+    // Close forum topic if applicable
+    if (ticket.threadId && cache.config.staffchat_is_forum && cache.config.staffchat_type === Messenger.TELEGRAM) {
+      await TelegramAddon.getInstance().closeForumTopic(cache.config.staffchat_id, ticket.threadId);
+    }
   }
 }
 

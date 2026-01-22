@@ -70,6 +70,36 @@ class TelegramAddon implements Addon {
     return response.message_id.toString();
   }
 
+  async createForumTopic(chatId: string | number, name: string): Promise<number | null> {
+    try {
+      const response = await this.bot.api.createForumTopic(chatId.toString(), name);
+      return response.message_thread_id;
+    } catch (error) {
+      log.error('Error creating forum topic:', error);
+      return null;
+    }
+  }
+
+  async closeForumTopic(chatId: string | number, threadId: number): Promise<boolean> {
+    try {
+      await this.bot.api.closeForumTopic(chatId.toString(), threadId);
+      return true;
+    } catch (error) {
+      log.error('Error closing forum topic:', error);
+      return false;
+    }
+  }
+
+  async reopenForumTopic(chatId: string | number, threadId: number): Promise<boolean> {
+    try {
+      await this.bot.api.reopenForumTopic(chatId.toString(), threadId);
+      return true;
+    } catch (error) {
+      log.error('Error reopening forum topic:', error);
+      return false;
+    }
+  }
+
   sendDocument = (
     chatId: string | number,
     document: any,

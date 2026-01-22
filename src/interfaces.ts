@@ -93,6 +93,7 @@ export class Config {
   bot_token: string;
   spam_cant_msg: number;
   staffchat_id: string | number;
+  staffchat_is_forum: boolean = false;
   staffchat_type: Messenger = Messenger.TELEGRAM;
   staffchat_parse_mode: ParseMode = ParseMode.MarkdownV2;
   owner_id: string;

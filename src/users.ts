@@ -4,6 +4,7 @@ import * as llm from './addons/llm';
 import * as db from './db';
 import { strictEscape as esc, reply, sendMessage } from './middleware';
 import { ISupportee } from './db';
+import TelegramAddon from './addons/telegram';
 import * as log from 'fancy-log'
 
 const TIME_BETWEEN_CONFIRMATION_MESSAGES = 86400000; // 24 hours
@@ -98,6 +99,26 @@ async function processTicket(
   autoReplyInfo?: string,
 ) {
   const { config } = cache;
+
+  // Handle forum topic creation if staffchat is a forum
+  let threadId = ticket.threadId;
+  if (config.staffchat_is_forum && config.staffchat_type === Messenger.TELEGRAM) {
+    if (!threadId) {
+      // Create a new forum topic for this ticket
+      const topicName = `#T${ticket.ticketId.toString().padStart(6, '0')} - ${ctx.message.from.first_name}`;
+      threadId = await TelegramAddon.getInstance().createForumTopic(config.staffchat_id, topicName);
+      if (threadId) {
+        await db.setThreadId(ticket.ticketId, threadId);
+      }
+    }
+  }
+
+  // Build extra options for staff chat messages
+  const staffChatOptions: any = { parse_mode: config.parse_mode };
+  if (threadId) {
+    staffChatOptions.message_thread_id = threadId;
+  }
+
   // Send confirmation if applicable
   if (
     !autoReplyInfo &&
@@ -124,6 +145,7 @@ async function processTicket(
       ctx,
       autoReplyInfo,
     ),
+    staffChatOptions,
   );
   db.addIdAndName(ticket.ticketId, messageId, ctx.message.from.first_name);
 
@@ -198,6 +220,13 @@ async function chat(ctx: Context, chat: { id: string }) {
   } else if (cache.ticketSent[cache.userId] < config.spam_cant_msg) {
     cache.ticketSent[cache.userId]++;
     const ticket = await db.getTicketByUserId(cache.userId, ctx.session.groupCategory);
+
+    // Build extra options for staff chat messages (with thread_id for forums)
+    const staffChatOptions: any = { parse_mode: config.parse_mode };
+    if (ticket.threadId) {
+      staffChatOptions.message_thread_id = ticket.threadId;
+    }
+
     sendMessage(
       config.staffchat_id,
       config.staffchat_type,
@@ -206,6 +235,7 @@ async function chat(ctx: Context, chat: { id: string }) {
         ctx,
         autoReplyInfo,
       ),
+      staffChatOptions,
     );
     if (ctx.session.group && ctx.session.group !== config.staffchat_id) {
       sendMessage(
