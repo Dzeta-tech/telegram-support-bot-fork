@@ -7,7 +7,7 @@ services:
     environment:
       - MONGO_URI=mongodb://mongodb:27017/support
     volumes:
-      - /config.yaml:/bot/config/config.yaml
+      - ./config.yaml:/bot/config/config.yaml
 
   mongodb:
     image: mongo:8.0
