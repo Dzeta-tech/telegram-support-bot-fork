@@ -171,6 +171,26 @@ export const setThreadId = async (
   return await Supportee.findOneAndUpdate(query, update, { new: true });
 };
 
+export async function getTicketByThreadId(
+  threadId: number
+): Promise<ISupportee | null> {
+  const result = await Supportee.findOne({ threadId });
+  return result as ISupportee | null;
+}
+
+export async function getOpenTicketByUserId(
+  userId: string | number,
+  category: string | null
+): Promise<ISupportee | null> {
+  const query = {
+    userid: userId,
+    status: 'open',
+    ...(category ? { category } : { category: null }),
+  };
+  const result = await Supportee.findOne(query);
+  return result as ISupportee | null;
+}
+
 export const add = async (
   userid: string | number,
   status: string,

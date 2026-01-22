@@ -88,60 +88,53 @@ const openCommand = (ctx: Context): void => {
  *
  * @param ctx - The bot context.
  */
-const closeCommand = (ctx: Context): void => {
+const closeCommand = async (ctx: Context): Promise<void> => {
   if (!ctx.session.admin) return;
-  const groups: string[] = [];
-  const { categories, language } = cache.config;
 
-  if (categories) {
-    categories.forEach(category => {
-      if (!category.subgroups || category.subgroups.length === 0) {
-        if (category.group_id == ctx.chat.id) groups.push(category.name);
-      } else {
-        category.subgroups.forEach((sub: { group_id: any; name: string }) => {
-          if (sub.group_id == ctx.chat.id) groups.push(sub.name);
-        });
-      }
-    });
+  let ticket: ISupportee | null = null;
+
+  // Check if we're in a forum topic - get ticket by thread_id
+  const messageThreadId = (ctx.message as any)?.message_thread_id;
+  if (cache.config.staffchat_is_forum && messageThreadId) {
+    ticket = await db.getTicketByThreadId(messageThreadId);
   }
 
-  // Only process if the reply is to a bot message
-  if (!ctx.message.reply_to_message.from.is_bot) return;
-  const replyText = ctx.message.reply_to_message.text || ctx.message.reply_to_message.caption;
-  if (!replyText) return;
-  const ticketId = extractTicketId(replyText);
-  if (!ticketId) return;
-
-  db.open(async (tickets: ISupportee[]) => {
-    if (!tickets) {
-      log.info('Close command: tickets undefined');
-      return;
-    }
-    let userId: any = null;
-    let closedTicket: ISupportee | null = null;
-    for (const ticket of tickets) {
-      if (ticket.id.toString().padStart(6, '0') === ticketId) {
-        db.add(ticket.userid, 'closed', ticket.category, ctx.messenger);
-        closedTicket = ticket;
+  // Fallback to reply-based ticket detection
+  if (!ticket && ctx.message?.reply_to_message?.from?.is_bot) {
+    const replyText = ctx.message.reply_to_message.text || ctx.message.reply_to_message.caption;
+    if (replyText) {
+      const ticketIdStr = extractTicketId(replyText);
+      if (ticketIdStr) {
+        ticket = await db.getTicketById(parseInt(ticketIdStr), ctx.session.groupCategory);
       }
-      userId = ticket.userid;
     }
-    const paddedTicket = ticketId.toString().padStart(6, '0');
-    middleware.reply(ctx, `${cache.config.language.ticket} #T${paddedTicket} ${cache.config.language.closed}`);
-    middleware.sendMessage(
-      userId,
-      ctx.messenger,
-      `${cache.config.language.ticket} #T${paddedTicket} ${cache.config.language.closed}\n\n${cache.config.language.ticketClosed}`
-    );
-    delete cache.ticketIDs[userId];
-    delete cache.ticketStatus[userId];
-    delete cache.ticketSent[userId];
+  }
 
-    // Close forum topic if applicable
-    if (closedTicket?.threadId && cache.config.staffchat_is_forum && cache.config.staffchat_type === Messenger.TELEGRAM) {
-      await TelegramAddon.getInstance().closeForumTopic(cache.config.staffchat_id, closedTicket.threadId);
-    }
-  }, groups);
+  if (!ticket) {
+    middleware.reply(ctx, 'Ticket not found.');
+    return;
+  }
+
+  const paddedTicket = ticket.ticketId.toString().padStart(6, '0');
+
+  // Close the ticket
+  await db.add(ticket.userid, 'closed', ticket.category, ticket.messenger);
+
+  middleware.reply(ctx, `${cache.config.language.ticket} #T${paddedTicket} ${cache.config.language.closed}`);
+  middleware.sendMessage(
+    ticket.userid,
+    ticket.messenger,
+    `${cache.config.language.ticket} #T${paddedTicket} ${cache.config.language.closed}\n\n${cache.config.language.ticketClosed}`
+  );
+
+  delete cache.ticketIDs[ticket.userid];
+  delete cache.ticketStatus[ticket.userid];
+  delete cache.ticketSent[ticket.userid];
+
+  // Close forum topic if applicable
+  if (ticket.threadId && cache.config.staffchat_is_forum && cache.config.staffchat_type === Messenger.TELEGRAM) {
+    await TelegramAddon.getInstance().closeForumTopic(cache.config.staffchat_id, ticket.threadId);
+  }
 };
 
 /**

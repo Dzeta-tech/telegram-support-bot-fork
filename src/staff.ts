@@ -106,38 +106,53 @@ async function chat(ctx: Context) {
     return;
   }
 
-  const replyMsg = ctx.message?.reply_to_message;
-  if (!replyMsg) return;
+  var ticket: ISupportee | null = null;
+  var ticketId: number | null = null;
+  var name: string | null = null;
 
-  const replyText = replyMsg.text || replyMsg.caption;
-  const replyMessageId = ctx.message.external_reply?.message_id;
-  if (!replyText && !replyMessageId) return;
-
-  var ticket;
-  var ticketId;
-  if (replyMessageId) {
-    ticket = await db.getTicketByInternalId(replyMessageId);
+  // Check if we're in a forum topic - get ticket by thread_id
+  const messageThreadId = (ctx.message as any)?.message_thread_id;
+  if (cache.config.staffchat_is_forum && messageThreadId) {
+    ticket = await db.getTicketByThreadId(messageThreadId);
     if (ticket) {
       ticketId = ticket.ticketId;
+      name = ticket.name;
     }
-  } else {
-    ticketId = parseInt(await extractTicketId(replyText, ctx));
-    
-    if (!ticketId) return;
-    ticket = await db.getTicketById(ticketId, ctx.session.groupCategory);
+  }
+
+  // Fallback to reply-based ticket detection
+  if (!ticket) {
+    const replyMsg = ctx.message?.reply_to_message;
+    if (!replyMsg) return;
+
+    const replyText = replyMsg.text || replyMsg.caption;
+    const replyMessageId = ctx.message.external_reply?.message_id;
+    if (!replyText && !replyMessageId) return;
+
+    if (replyMessageId) {
+      ticket = await db.getTicketByInternalId(replyMessageId);
+      if (ticket) {
+        ticketId = ticket.ticketId;
+      }
+    } else {
+      ticketId = parseInt(await extractTicketId(replyText, ctx));
+
+      if (!ticketId) return;
+      ticket = await db.getTicketById(ticketId, ctx.session.groupCategory);
+    }
+
+    if (ticket && !name) {
+      name = ticket.name || extractName(replyText);
+    }
   }
 
   if (!ticket) {
     middleware.reply(ctx, cache.config.language.ticketClosedError);
     return;
   }
-  var name;
-  if (ticket.name) {
-    name = ticket.name;
-  } else {
-    name = extractName(replyText);
+  if (!name) {
+    name = 'User';
   }
-  if (!name) return;
 
   // Mark ticket as no longer active
   cache.ticketStatus[ticketId] = false;

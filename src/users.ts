@@ -214,7 +214,7 @@ async function chat(ctx: Context, chat: { id: string }) {
 
   // If no ticket has been sent yet, fetch from DB and set up spam timer
   if (cache.ticketSent[cache.userId] === undefined) {
-    const ticket = await db.getTicketByUserId(chat.id, ctx.session.groupCategory);
+    const ticket = await db.getOpenTicketByUserId(chat.id, ctx.session.groupCategory);
     processTicket(ticket, ctx, chat.id, autoReplyInfo);
 
     // Prevent multiple notifications for a period defined by spam_time
@@ -224,7 +224,7 @@ async function chat(ctx: Context, chat: { id: string }) {
     cache.ticketSent[cache.userId] = 0;
   } else if (cache.ticketSent[cache.userId] < config.spam_cant_msg) {
     cache.ticketSent[cache.userId]++;
-    const ticket = await db.getTicketByUserId(cache.userId, ctx.session.groupCategory);
+    const ticket = await db.getOpenTicketByUserId(cache.userId, ctx.session.groupCategory);
 
     if (!ticket) {
       log.error('chat: ticket not found for userId', cache.userId);
@@ -264,7 +264,7 @@ async function chat(ctx: Context, chat: { id: string }) {
   }
 
   // Log the ticket message for debugging
-  const ticket = await db.getTicketByUserId(cache.userId, ctx.session.groupCategory)
+  const ticket = await db.getOpenTicketByUserId(cache.userId, ctx.session.groupCategory)
   log.info(
     formatMessageAsTicket(
       ticket.ticketId,
